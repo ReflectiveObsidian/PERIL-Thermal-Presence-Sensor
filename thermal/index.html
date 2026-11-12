@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Presence</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:sans-serif;max-width:520px;margin:24px auto;padding:0 12px;background:#111;color:#ddd}
+h2{font-size:15px;font-weight:600;margin-bottom:20px;color:#888;letter-spacing:1px}
+#status{font-size:clamp(22px,7vw,34px);font-weight:700;text-align:center;padding:16px;
+  border-radius:10px;margin-bottom:8px;transition:all .3s}
+.present{background:#3a0a0a;color:#ff5555}
+.clear  {background:#0a2a0a;color:#55ff55}
+.none   {background:#1a1a1a;color:#555}
+#match-info{text-align:center;font-size:12px;color:#777;margin-bottom:20px;min-height:16px}
+hr{border:none;border-top:1px solid #222;margin:16px 0}
+.slot{margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #1a1a1a}
+.slot:last-child{border-bottom:none}
+.slot-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.slot-row label{font-size:11px;color:#555;width:44px;flex-shrink:0}
+.slot-row input[type=text]{flex:1;min-width:80px;padding:6px 8px;background:#1a1a1a;
+  border:1px solid #2a2a2a;color:#ddd;border-radius:6px;font-size:13px}
+.slot-btns{display:flex;gap:6px;flex-shrink:0}
+.slot-row button{padding:6px 10px;background:#1a3050;border:1px solid #2a5080;
+  color:#aad;border-radius:6px;cursor:pointer;font-size:12px;white-space:nowrap}
+.slot-row button:hover{background:#2a5080}
+.del-btn{background:#301a1a!important;border-color:#803030!important;color:#d88!important}
+.del-btn:hover{background:#502020!important}
+.score-row{display:flex;align-items:center;gap:6px;margin-top:6px;padding-left:50px}
+.score-label{font-size:10px;color:#555}
+.score-val{font-family:monospace;font-size:11px;color:#888;width:46px}
+.score-bar-wrap{flex:1;height:6px;background:#1a1a1a;border-radius:3px;position:relative;overflow:visible}
+.score-bar{height:100%;background:#2a5080;border-radius:3px;transition:width .4s,background .4s}
+.thr-mark{position:absolute;top:-2px;width:2px;height:10px;border-radius:1px;pointer-events:none}
+.trig-mark{background:#ff9944}
+.reset-mark{background:#ff4455}
+.thr-inputs{display:flex;gap:6px;align-items:center;padding-left:50px;margin-top:6px;flex-wrap:wrap}
+.thr-inputs span{font-size:10px;color:#555}
+.thr-inputs input{width:64px;padding:4px 6px;background:#1a1a1a;border:1px solid #333;
+  color:#ddd;border-radius:5px;font-size:11px}
+.thr-inputs button{padding:4px 10px;background:#1a1a1a;border:1px solid #444;
+  color:#aaa;border-radius:5px;cursor:pointer;font-size:11px}
+.thr-inputs button:hover{border-color:#aaa;color:#ddd}
+.thr-legend{display:flex;gap:12px;padding-left:50px;margin-top:3px;font-size:9px;color:#444}
+.thr-legend span{display:flex;align-items:center;gap:4px}
+.dot{width:8px;height:3px;border-radius:1px;display:inline-block}
+.matched-slot .slot-row button{border-color:#55ff55;color:#55ff55}
+.matched-slot .score-bar{background:#55ff55}
+.matched-slot .score-val{color:#55ff55}
+#device-stats{display:flex;gap:10px;justify-content:center;margin-bottom:16px;flex-wrap:wrap}
+.stat-chip{display:flex;align-items:center;gap:6px;background:#1a1a1a;border:1px solid #2a2a2a;
+  border-radius:8px;padding:6px 12px;font-size:12px;color:#888}
+.stat-chip .stat-icon{font-size:14px;opacity:.7}
+.stat-chip .stat-val{font-family:monospace;font-size:13px;color:#aaa}
+/* debug section */
+.dbg-title{font-size:15px;font-weight:600;color:#555;letter-spacing:1px;margin:0 0 12px}
+.dbg-row{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}
+.dbg-btn{padding:6px 14px;background:#1a1a30;border:1px solid #3030a0;color:#99b;
+  border-radius:6px;cursor:pointer;font-size:12px}
+#dbg-canvas-wrap{margin-top:12px}
+#dbg-canvas{display:block;border-radius:4px;cursor:crosshair;max-width:100%;height:auto;touch-action:none}
+#dbg-temp-range{font-family:monospace;font-size:10px;color:#555;margin-top:5px}
+#zone-ui{margin-top:12px}
+.zone-caption{font-size:10px;color:#555;letter-spacing:1px;margin-bottom:6px}
+#zone-text{width:100%;background:#1a1a1a;border:1px solid #2a2a2a;color:#ddd;border-radius:5px;
+  font-family:monospace;font-size:11px;padding:6px;resize:vertical}
+.zone-actions{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center}
+.zone-btn{padding:5px 12px;background:#1a1a1a;border:1px solid #444;color:#aaa;
+  border-radius:5px;cursor:pointer;font-size:11px}
+.zone-add{background:#1a2a1a;border-color:#3a6a3a;color:#8c8}
+.zone-btn:disabled{opacity:.4;cursor:default}
+#zone-status{font-size:10px;color:#555}
+@media(max-width:400px){
+  body{margin:12px auto;padding:0 8px}
+  .score-row,.thr-inputs,.thr-legend{padding-left:0}
+  .thr-inputs{gap:4px}
+  .thr-inputs input{width:56px}
+}
+</style></head>
+<body>
+<h2>MLX9064X PRESENCE DETECTION</h2>
+<div id="status" class="none">&#x2014;</div>
+<div id="match-info"></div>
+<div id="device-stats">
+  <div class="stat-chip"><span class="stat-icon">&#x1F4BE;</span>RAM free<span class="stat-val" id="stat-mem">&#x2014;</span></div>
+  <div class="stat-chip"><span class="stat-icon">&#x1F4F6;</span>WiFi<span class="stat-val" id="stat-rssi">&#x2014;</span></div>
+</div>
+<hr>
+<div id="slots"></div>
+
+<div id="debug-section" style="display:none">
+<hr>
+<h2 class="dbg-title">DEBUG</h2>
+<div class="dbg-row">
+  <button class="dbg-btn" onclick="copyFrame()">Copy current frame</button>
+  <div id="dbg-slots" class="dbg-row"></div>
+</div>
+<div id="dbg-canvas-wrap" style="display:none">
+  <canvas id="dbg-canvas" width="448" height="336"></canvas>
+  <div id="dbg-temp-range"></div>
+</div>
+<div id="zone-ui">
+  <div class="zone-caption">IGNORE ZONES — drag on image to select, or edit directly (x1,y1,x2,y2 per line)</div>
+  <textarea id="zone-text" rows="3" placeholder="e.g. 0,0,4,3"></textarea>
+  <div class="zone-actions">
+    <button id="zone-add-btn" class="zone-btn zone-add" onclick="addSelectionZone()" disabled>Add selection</button>
+    <button class="zone-btn" onclick="applyZones()">Apply</button>
+    <button class="zone-btn" onclick="clearZones()">Clear all</button>
+    <span id="zone-status"></span>
+  </div>
+</div>
+</div>
+
+<script>
+
+var scaleScore = 1.0;  // auto-computed each poll
+var labs = ["Slot 1","Slot 2","Slot 3"];
+var trigVals = [2, 2, 2];
+var rstVals  = [0.5, 0.5, 0.5];
+var MIN_THR  = 0.05;  // server clamps thresholds to at least this
+var initialized = false;
+var ignoreZones = [];
+var zoneSel = null;   // {c1,r1,c2,r2} sensor coords during drag
+var isDragging = false;
+var _canvasSetup = false;
+var _lastFrameVals = null;
+
+function canvasToSensor(cx,cy){
+  var col=Math.max(0,Math.min(31,Math.floor(cx/14)));
+  var row=Math.max(0,Math.min(23,Math.floor(cy/14)));
+  return {col:col, row:23-row};  // reverse the row-flip applied in renderFrame
+}
+function zoneToCanvasRect(z){
+  // z=[x1,y1,x2,y2] sensor coords → canvas rect (row-flip: canvas_row = 23-sensor_row)
+  return {x:z[0]*14, y:(23-z[3])*14, w:(z[2]-z[0]+1)*14, h:(z[3]-z[1]+1)*14};
+}
+function normZone(s){
+  return [Math.min(s.c1,s.c2),Math.min(s.r1,s.r2),Math.max(s.c1,s.c2),Math.max(s.r1,s.r2)];
+}
+function zonesToText(zones){
+  return zones.map(function(z){return z.join(',');}).join('\n');
+}
+function textToZones(text){
+  var zones=[];
+  text.trim().split(/\n/).forEach(function(line){
+    line=line.trim(); if(!line) return;
+    var p=line.split(',').map(Number);
+    if(p.length===4&&p.every(function(v){return !isNaN(v);})){
+      var x1=Math.max(0,Math.min(31,p[0]|0)), y1=Math.max(0,Math.min(23,p[1]|0));
+      var x2=Math.max(0,Math.min(31,p[2]|0)), y2=Math.max(0,Math.min(23,p[3]|0));
+      if(x2>=x1&&y2>=y1) zones.push([x1,y1,x2,y2]);
+    }
+  });
+  return zones;
+}
+function saveZones(){
+  fetch('/ignore_zones',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ignoreZones)})
+    .then(function(){document.getElementById('zone-status').textContent=ignoreZones.length+' zone(s) active';})
+    .catch(function(){document.getElementById('zone-status').textContent='save failed';});
+}
+function applyZones(){
+  if(!confirm('Apply ignore zones?')) return;
+  ignoreZones=textToZones(document.getElementById('zone-text').value);
+  document.getElementById('zone-text').value=zonesToText(ignoreZones);
+  saveZones();
+}
+function clearZones(){
+  if(!confirm('Clear all ignore zones?')) return;
+  ignoreZones=[];
+  zoneSel=null;
+  document.getElementById('zone-text').value='';
+  document.getElementById('zone-add-btn').disabled=true;
+  if(_lastFrameVals) renderFrame(_lastFrameVals);
+  saveZones();
+}
+function addSelectionZone(){
+  if(!zoneSel) return;
+  ignoreZones.push(normZone(zoneSel));
+  zoneSel=null;
+  isDragging=false;
+  document.getElementById('zone-text').value=zonesToText(ignoreZones);
+  document.getElementById('zone-add-btn').disabled=true;
+  if(_lastFrameVals) renderFrame(_lastFrameVals);
+  saveZones();
+}
+function setupZoneCanvas(){
+  if(_canvasSetup) return;
+  _canvasSetup=true;
+  var canvas=document.getElementById('dbg-canvas');
+  function getPos(e){
+    var r=canvas.getBoundingClientRect();
+    return {cx:(e.clientX-r.left)*canvas.width/r.width, cy:(e.clientY-r.top)*canvas.height/r.height};
+  }
+  // Pointer events cover mouse, touch and pen. CSS touch-action:none on the
+  // canvas stops a touch drag from scrolling the page instead of selecting.
+  canvas.addEventListener('pointerdown',function(e){
+    if(e.pointerType==='mouse'&&e.button!==0) return;
+    e.preventDefault();
+    canvas.setPointerCapture(e.pointerId);  // keep receiving moves outside the canvas
+    var p=getPos(e), s=canvasToSensor(p.cx,p.cy);
+    isDragging=true; zoneSel={c1:s.col,r1:s.row,c2:s.col,r2:s.row};
+    document.getElementById('zone-add-btn').disabled=true;
+  });
+  canvas.addEventListener('pointermove',function(e){
+    if(!isDragging) return;
+    var p=getPos(e), s=canvasToSensor(p.cx,p.cy);
+    zoneSel.c2=s.col; zoneSel.r2=s.row;
+    if(_lastFrameVals) renderFrame(_lastFrameVals);
+  });
+  function endDrag(){
+    if(!isDragging) return; isDragging=false;
+    if(zoneSel&&(zoneSel.c1!==zoneSel.c2||zoneSel.r1!==zoneSel.r2))
+      document.getElementById('zone-add-btn').disabled=false;
+    else zoneSel=null;
+  }
+  canvas.addEventListener('pointerup',endDrag);
+  canvas.addEventListener('pointercancel',endDrag);
+}
+
+function build(){
+  var h='';
+  for(var i=0;i<3;i++){
+    h+='<div class="slot" id="srow'+i+'">'
+      +'<div class="slot-row">'
+      +'<label>Slot '+(i+1)+'</label>'
+      +'<input type="text" id="lab'+i+'" value="'+labs[i]+'" placeholder="Label">'
+      +'<div class="slot-btns">'
+      +'<button onclick="save('+i+')">Save</button>'
+      +'<button class="del-btn" onclick="delSlot('+i+')">Delete</button>'
+      +'</div>'
+      +'</div>'
+      +'<div class="score-row">'
+      +'<span class="score-label">Score</span>'
+      +'<span class="score-val" id="score'+i+'">&#x2014;</span>'
+      +'<div class="score-bar-wrap">'
+      +'<div class="score-bar" id="bar'+i+'" style="width:0%"></div>'
+      +'<div class="thr-mark trig-mark" id="tmark'+i+'"></div>'
+      +'<div class="thr-mark reset-mark" id="rmark'+i+'"></div>'
+      +'</div>'
+      +'</div>'
+      +'<div class="thr-inputs">'
+      +'<span>Trigger</span>'
+      +'<input type="number" id="trig'+i+'" step="0.05" min="'+MIN_THR+'" value="'+trigVals[i]+'">'
+      +'<span>Reset</span>'
+      +'<input type="number" id="rst'+i+'" step="0.05" min="'+MIN_THR+'" value="'+rstVals[i]+'">'
+      +'<button onclick="applySlotThr('+i+')">Apply</button>'
+      +'</div>'
+      +'<div class="thr-legend">'
+      +'<span><span class="dot" style="background:#ff9944"></span>trigger</span>'
+      +'<span><span class="dot" style="background:#ff4455"></span>reset</span>'
+      +'</div>'
+      +'</div>';
+  }
+  document.getElementById('slots').innerHTML=h;
+}
+build();
+
+function save(i){
+  var l=document.getElementById('lab'+i).value||'Slot '+(i+1);
+  if(!confirm('Save current frame as "'+l+'"?')) return;
+  labs[i]=l;
+  fetch('/save/'+i,{method:'POST',headers:{'Content-Type':'text/plain'},body:l}).then(poll);
+}
+
+function delSlot(i){
+  var l=document.getElementById('lab'+i).value||'Slot '+(i+1);
+  if(!confirm('Delete "'+l+'"?')) return;
+  fetch('/delete/'+i,{method:'POST'}).then(poll);
+}
+
+function applySlotThr(i){
+  var t=parseFloat(document.getElementById('trig'+i).value);
+  var r=parseFloat(document.getElementById('rst'+i).value);
+  if(isNaN(t)||isNaN(r)) return;
+  if(t<MIN_THR||r<MIN_THR){alert('Thresholds must be at least '+MIN_THR+'.');return;}
+  if(r>=t){alert('Reset ('+r+') must be below trigger ('+t+').');return;}
+  if(!confirm('Apply thresholds — trigger: '+t+', reset: '+r+'?')) return;
+  fetch('/thresholds/'+i,{method:'POST',headers:{'Content-Type':'text/plain'},body:String(t)+','+String(r)})
+    .then(function(res){
+      if(res.ok){trigVals[i]=t;rstVals[i]=r;}
+      else res.text().then(function(m){alert('Not applied: '+m);});
+      poll();
+    })
+    .catch(function(){alert('Not applied: device unreachable.');});
+}
+
+function updateMarkers(i){
+  var tp=Math.min(100,(trigVals[i]/scaleScore)*100);
+  var rp=Math.min(100,(rstVals[i]/scaleScore)*100);
+  var tm=document.getElementById('tmark'+i);
+  var rm=document.getElementById('rmark'+i);
+  if(tm) tm.style.left='calc('+tp+'% - 1px)';
+  if(rm) rm.style.left='calc('+rp+'% - 1px)';
+}
+
+// Polling: the next /status request starts 1 s after the previous one finishes,
+// so a slow device never has requests piling up. If no reply arrives within
+// 10 s, poll again anyway so the page recovers from a dropped request.
+var POLL_INTERVAL = 1000, POLL_TIMEOUT = 10000;
+var pollTimer = null, pollSeq = 0;
+function schedulePoll(ms){
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(poll, ms);
+}
+function poll(){
+  var seq = ++pollSeq;
+  schedulePoll(POLL_TIMEOUT);  // fallback if this request never completes
+  fetch('/status').then(function(r){return r.json();}).then(function(d){
+    var s=document.getElementById('status');
+    if(!d.any_slot){s.className='none';s.textContent='No slots saved';}
+    else if(d.presence){s.className='present';s.textContent='PRESENCE DETECTED';}
+    else{s.className='clear';s.textContent='CLEAR';}
+
+    var mi=document.getElementById('match-info');
+    if(d.matched.length){
+      var names=d.matched.map(function(i){return d.labels[i]||'Slot '+(i+1);});
+      mi.textContent='Matching: '+names.join(', ');
+    } else { mi.textContent=d.any_slot?'No match':''; }
+
+    // auto-scale: covers both thresholds so markers are always visible
+    var peak = 0;
+    for(var i=0;i<3;i++){
+      if(trigVals[i]>peak) peak=trigVals[i];
+      if(rstVals[i]>peak) peak=rstVals[i];
+    }
+    scaleScore = peak * 1.25;
+
+    for(var i=0;i<3;i++){
+      var row=document.getElementById('srow'+i);
+      var bar=document.getElementById('bar'+i);
+      var scoreEl=document.getElementById('score'+i);
+      var isMatch=d.matched.indexOf(i)>=0;
+      if(row) row.className='slot'+(isMatch?' matched-slot':'');
+      var m=d.slot_score[i];
+      if(m!==null&&m!==undefined){
+        scoreEl.textContent=m.toFixed(4);
+        bar.style.width=Math.min(100,(m/scaleScore)*100)+'%';
+      } else {
+        scoreEl.textContent='—';
+        bar.style.width='0%';
+      }
+      var inp=document.getElementById('lab'+i);
+      if(inp&&inp!==document.activeElement&&d.labels[i]) inp.value=d.labels[i];
+
+      // sync threshold inputs and markers on first load only
+      if(!initialized){
+        trigVals[i]=d.trigger_thresholds[i];
+        rstVals[i]=d.reset_thresholds[i];
+        var ti=document.getElementById('trig'+i);
+        var ri=document.getElementById('rst'+i);
+        if(ti) ti.value=+trigVals[i].toFixed(4);
+        if(ri) ri.value=+rstVals[i].toFixed(4);
+      }
+      updateMarkers(i);
+    }
+
+    if(!initialized){
+      if(d.device_name){
+        document.title=d.device_name;
+        document.querySelector('h2').textContent=d.device_name.toUpperCase();
+      }
+      if(d.ignore_zones){
+        ignoreZones=d.ignore_zones;
+        var zt=document.getElementById('zone-text');
+        if(zt) zt.value=zonesToText(ignoreZones);
+        var zs=document.getElementById('zone-status');
+        if(zs) zs.textContent=ignoreZones.length+' zone(s) active';
+      }
+      initialized=true;
+    }
+    var memEl=document.getElementById('stat-mem');
+    var rssiEl=document.getElementById('stat-rssi');
+    if(memEl&&d.mem_free!=null) memEl.textContent=d.mem_free>=1024?(d.mem_free>>10)+' KB':d.mem_free+' B';
+    if(rssiEl&&d.rssi!=null) rssiEl.textContent=d.rssi+' dBm';
+
+    if(window.dbgUpdate)dbgUpdate(d);
+  }).catch(function(){}).then(function(){
+    // only the newest request schedules the next one; a late reply to a
+    // request the fallback already replaced must not start a second chain
+    if(seq===pollSeq) schedulePoll(POLL_INTERVAL);
+  });
+}
+
+fetch('/debug').then(function(r){return r.json();}).then(function(d){
+  if(d.debug) document.getElementById('debug-section').style.display='';
+}).catch(function(){});
+
+poll();
+
+function thermalColor(t){
+  var r,g,b;
+  if(t<0.25){r=0;g=0;b=Math.round(128+t*512);}
+  else if(t<0.5){r=0;g=Math.round((t-0.25)*1020);b=255;}
+  else if(t<0.75){r=Math.round((t-0.5)*1020);g=255;b=Math.round(255-(t-0.5)*1020);}
+  else{r=255;g=Math.round(255-(t-0.75)*1020);b=0;}
+  return 'rgb('+r+','+g+','+b+')';
+}
+
+function renderFrame(vals){
+  _lastFrameVals=vals;
+  var valid=vals.filter(function(v){return !isNaN(v);});
+  var sorted=valid.slice().sort(function(a,b){return a-b;});
+  var lo=Math.floor(sorted.length*0.01);
+  var hi=Math.floor(sorted.length*0.99)-1;
+  var min=sorted[lo]||0,max=sorted[hi]||0;
+  var range=max-min||1;
+  var canvas=document.getElementById('dbg-canvas');
+  var ctx=canvas.getContext('2d');
+  var pw=14,ph=14,W=32,H=24;
+  for(var row=0;row<H;row++){
+    for(var col=0;col<W;col++){
+      var v=vals[(H-1-row)*W+col];  // flip vertically to match device orientation
+      if(isNaN(v)){
+        ctx.fillStyle='#ff88cc';
+      } else {
+        ctx.fillStyle=thermalColor(Math.min(1,Math.max(0,(v-min)/range)));
+      }
+      ctx.fillRect(col*pw,row*ph,pw,ph);
+    }
+  }
+  // Saved ignore zones — orange overlay
+  ignoreZones.forEach(function(z){
+    var r=zoneToCanvasRect(z);
+    ctx.fillStyle='rgba(255,100,0,0.28)';
+    ctx.fillRect(r.x,r.y,r.w,r.h);
+    ctx.strokeStyle='rgba(255,150,0,0.85)';
+    ctx.lineWidth=1; ctx.strokeRect(r.x+0.5,r.y+0.5,r.w-1,r.h-1);
+  });
+  // Active drag selection — yellow outline
+  if(zoneSel){
+    var z=normZone(zoneSel), r=zoneToCanvasRect(z);
+    ctx.fillStyle='rgba(255,255,0,0.15)';
+    ctx.fillRect(r.x,r.y,r.w,r.h);
+    ctx.strokeStyle='rgba(255,255,0,0.9)';
+    ctx.lineWidth=1; ctx.strokeRect(r.x+0.5,r.y+0.5,r.w-1,r.h-1);
+    // Selection coordinate label
+    ctx.font='bold 9px monospace'; ctx.textAlign='left'; ctx.textBaseline='top';
+    var lbl=z[0]+','+z[1]+' – '+z[2]+','+z[3];
+    var bw=ctx.measureText(lbl).width+4;
+    var lx=r.x, ly=r.y+r.h+1; if(ly+11>H*ph) ly=r.y-12;
+    ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(lx,ly,bw,11);
+    ctx.fillStyle='#ff0'; ctx.fillText(lbl,lx+2,ly+1);
+  }
+  // Corner labels showing original sensor coordinates (col, row)
+  var corners=[
+    {px:1,       py:1,       tx:'left',  tb:'top',    label:'(0,23)'},
+    {px:W*pw-1,  py:1,       tx:'right', tb:'top',    label:'(31,23)'},
+    {px:1,       py:H*ph-1,  tx:'left',  tb:'bottom', label:'(0,0)'},
+    {px:W*pw-1,  py:H*ph-1,  tx:'right', tb:'bottom', label:'(31,0)'},
+  ];
+  ctx.font='bold 9px monospace';
+  corners.forEach(function(c){
+    ctx.textAlign=c.tx; ctx.textBaseline=c.tb;
+    var bw=ctx.measureText(c.label).width+2,bh=11;
+    ctx.fillStyle='rgba(0,0,0,0.65)';
+    ctx.fillRect(c.tx==='left'?c.px-1:c.px-bw+1, c.tb==='top'?c.py-1:c.py-bh+1, bw, bh);
+    ctx.fillStyle='#eee';
+    ctx.fillText(c.label,c.px,c.py);
+  });
+  document.getElementById('dbg-temp-range').textContent=
+    'min: '+min.toFixed(2)+'°C  max: '+max.toFixed(2)+'°C  range: '+(max-min).toFixed(2)+'°C';
+  document.getElementById('dbg-canvas-wrap').style.display='block';
+  setupZoneCanvas();
+}
+
+function dbgUpdate(d){
+  var wrap=document.getElementById('dbg-slots');
+  wrap.textContent='';
+  for(var i=0;i<3;i++){
+    if(d.slot_score[i]!==null&&d.slot_score[i]!==undefined){
+      var b=document.createElement('button');
+      b.className='dbg-btn';
+      b.textContent='Copy '+(d.labels[i]||'Slot '+(i+1));  // textContent: labels are user input
+      b.onclick=copySlot.bind(null,i);
+      wrap.appendChild(b);
+    }
+  }
+}
+
+function copyText(t){
+  var el=document.createElement('textarea');
+  el.value=t;
+  el.style.cssText='position:fixed;opacity:0';
+  document.body.appendChild(el);
+  el.select();
+  document.execCommand('copy');
+  document.body.removeChild(el);
+}
+
+function copyFrame(){
+  fetch('/frame').then(function(r){return r.text();}).then(function(t){
+    copyText(t);
+    renderFrame(t.split(',').map(parseFloat));
+  });
+}
+
+function copySlot(i){
+  fetch('/slot_frame/'+i).then(function(r){return r.text();}).then(function(t){
+    copyText(t);
+    renderFrame(t.split(',').map(parseFloat));
+  });
+}
+</script>
+</body></html>

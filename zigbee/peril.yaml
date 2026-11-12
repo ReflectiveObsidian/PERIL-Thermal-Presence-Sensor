@@ -1,0 +1,224 @@
+# ESPHome Configuration for Zigbee MCU (ESP32-C6) of Peril Thermal Presence Sensor
+
+esphome:
+  name: peril
+  friendly_name: Peril
+  on_boot:
+    priority: -100  # runs after Zigbee initialises
+    then:
+      - lambda: |-
+          id(sensor_occupancy).publish_state(false);
+          id(sensor_slot1).publish_state(NAN);
+          id(sensor_slot2).publish_state(NAN);
+          id(sensor_slot3).publish_state(NAN);
+
+esp32:
+  board: esp32-c6-devkitc-1
+  variant: esp32c6
+  framework:
+    type: esp-idf
+  cpu_frequency: 80MHz  # supports 80, 120, 160 MHz
+
+logger:
+  hardware_uart: UART0
+
+zigbee:
+  id: zigbee_id
+  router: true
+  power_source: MAINS_SINGLE_PHASE
+  on_join:
+    then:
+      - light.turn_on:
+          id: status_led
+          red: 0%
+          green: 100%
+          blue: 0%
+          brightness: 60%
+          transition_length: 0ms
+      - delay: 2s
+      - light.turn_off:
+          id: status_led
+
+uart:
+  id: c3_uart
+  tx_pin: GPIO2
+  rx_pin: GPIO6
+  baud_rate: 9600
+
+light:
+  - platform: esp32_rmt_led_strip
+    channel_colors: GRB
+    chipset: WS2812
+    pin: GPIO8
+    num_leds: 1
+    id: status_led
+    name: "Status LED"
+    internal: true
+    effects:
+      - pulse:
+          name: "Pairing"
+          transition_length: 300ms
+          update_interval: 600ms
+          min_brightness: 0%
+          max_brightness: 60%
+
+globals:
+  - id: uart_buf
+    type: std::string
+    restore_value: false
+    initial_value: '""'
+  - id: last_rx
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+  - id: link_ok
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+
+binary_sensor:
+  - platform: template
+    name: "Occupancy"
+    id: sensor_occupancy
+    device_class: occupancy
+    report: force
+
+  - platform: gpio
+    pin:
+      number: GPIO9
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    id: boot_button
+    name: "Boot Button"
+    internal: true
+    on_click:
+      min_length: 3000ms
+      max_length: 10000ms   # optional upper bound
+      then:
+        - logger.log: "Long press — triggering Zigbee re-pair"
+        - light.turn_on:
+            id: status_led
+            red: 0%
+            green: 0%
+            blue: 100%
+            brightness: 50%
+            effect: "Pairing"
+        - delay: 2s
+        - zigbee.factory_reset:
+
+# Zigbee exposes only a sensor's name, state and unit_of_measurement.
+# state_class and accuracy_decimals below have no effect over Zigbee; they are
+# kept for the ESPHome logs and in case the config is reused with the native API.
+# Units must be one ESPHome maps to a BACnet engineering unit, otherwise they
+# silently fall back to unitless (see components/zigbee/const.py, BACNET_UNITS).
+sensor:
+  - platform: template
+    name: "Slot 1 Score"
+    id: sensor_slot1
+    state_class: measurement
+    unit_of_measurement: "%"  # a unitless "score" is closer, but "%" displays better
+    accuracy_decimals: 4
+    report: force
+    filters:
+      - throttle_with_priority: 10s
+      - delta: 0.3
+
+  - platform: template
+    name: "Slot 2 Score"
+    id: sensor_slot2
+    state_class: measurement
+    unit_of_measurement: "%"
+    accuracy_decimals: 4
+    report: force
+    filters:
+      - throttle_with_priority: 10s
+      - delta: 0.3
+
+  - platform: template
+    name: "Slot 3 Score"
+    id: sensor_slot3
+    state_class: measurement
+    unit_of_measurement: "%"
+    accuracy_decimals: 4
+    report: force
+    filters:
+      - throttle_with_priority: 10s
+      - delta: 0.3
+
+interval:
+  # ── UART receive: COBS-framed, CRC-8-checked binary frames ──────────
+  # Frames are delimited by 0x00. On each delimiter we COBS-decode the
+  # accumulated bytes, verify the CRC-8, then unpack the 13-byte payload:
+  #   [0] presence(uint8)  [1..12] slot1/2/3(float32 LE)  followed by [13] CRC-8
+  # Any negative slot score is treated as "no reference" (NaN).
+  # Must match send_scores() in thermal/link.py on the C3.
+  - interval: 100ms
+    then:
+      - lambda: |-
+          while (id(c3_uart).available()) {
+            uint8_t b;
+            id(c3_uart).read_byte(&b);
+            if (b == 0x00) {
+              std::string &buf = id(uart_buf);
+              uint8_t dec[32];
+              size_t dn = 0, i = 0, n = buf.size();
+              bool ok = n > 0;
+              while (i < n) {
+                uint8_t code = (uint8_t)buf[i++];
+                if (code == 0) { ok = false; break; }
+                for (uint8_t j = 1; j < code; j++) {
+                  if (i >= n || dn >= sizeof(dec)) { ok = false; break; }
+                  dec[dn++] = (uint8_t)buf[i++];
+                }
+                if (!ok) break;
+                if (code < 0xFF && i < n) {
+                  if (dn >= sizeof(dec)) { ok = false; break; }
+                  dec[dn++] = 0;
+                }
+              }
+              if (ok && dn == 14) {
+                uint8_t crc = 0;
+                for (size_t k = 0; k < 13; k++) {
+                  crc ^= dec[k];
+                  for (int z = 0; z < 8; z++)
+                    crc = (crc & 0x80) ? ((crc << 1) ^ 0x07) : (crc << 1);
+                }
+                if (crc == dec[13]) {
+                  float s1, s2, s3;
+                  memcpy(&s1, dec + 1, 4);
+                  memcpy(&s2, dec + 5, 4);
+                  memcpy(&s3, dec + 9, 4);
+                  id(sensor_occupancy).publish_state(dec[0] == 1);
+                  id(sensor_slot1).publish_state(s1 < 0 ? NAN : s1);
+                  id(sensor_slot2).publish_state(s2 < 0 ? NAN : s2);
+                  id(sensor_slot3).publish_state(s3 < 0 ? NAN : s3);
+                  id(last_rx) = millis();
+                  id(link_ok) = true;
+                }
+              }
+              buf.clear();
+            } else {
+              id(uart_buf) += (char)b;
+              if (id(uart_buf).size() > 64) id(uart_buf).clear();
+            }
+          }
+
+  # ── Link watchdog ──────────────────────────────────────────────────
+  # The C3 sends a frame after each sensor read, roughly every 2 s. If no
+  # valid frame arrives for 5 s,
+  # flag the numeric sensors as unknown (NaN) so a dead/stalled link
+  # surfaces in Home Assistant instead of silently holding stale values.
+  # Occupancy is deliberately left untouched to avoid spurious presence
+  # transitions on a transient dropout — change here if you prefer it to
+  # go OFF when the link dies.
+  - interval: 1s
+    then:
+      - lambda: |-
+          if (id(link_ok) && (millis() - id(last_rx) > 5000)) {
+            id(link_ok) = false;
+            id(sensor_slot1).publish_state(NAN);
+            id(sensor_slot2).publish_state(NAN);
+            id(sensor_slot3).publish_state(NAN);
+          }
