@@ -1,4 +1,6 @@
-# Introduction
+# PERIL - Thermal Presence Sensor for Home Assistant and Zigbee
+
+## Introduction
 
 The PERIL presense sensor uses a thermal camera to detect static human presence. This enables it to detect non-moving people with greater reliability than existing radar-based solutions. Presence is reported to Home Assistant over Wi-Fi and Zigbee.
 
